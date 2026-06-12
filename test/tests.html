@@ -72,7 +72,7 @@ fetch("vectors.json").then(r => r.json()).then(v => {
     const [lookup, warnings] = Parsers.buildUrlLookup(c.in);
     check("build_url_lookup", i, {lookup, warnings}, c.out);
   });
-  if (window.Report) {
+  if (typeof Report !== "undefined") {
     v.external_domain.forEach((c, i) =>
       check("external_domain", i, Report.externalDomain(c.in), c.out));
     v.build_markdown.forEach((c, i) =>

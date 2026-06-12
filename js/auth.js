@@ -16,7 +16,10 @@ const Auth = (() => {
 
   function signOut() {
     if (session) {
-      try { arcgisRest.ArcGISIdentityManager.destroy(session); } catch (e) { /* best-effort */ }
+      try {
+        const p = arcgisRest.ArcGISIdentityManager.destroy(session);
+        if (p && typeof p.catch === "function") p.catch(() => { /* best-effort revoke */ });
+      } catch (e) { /* best-effort */ }
     }
     session = null;
   }

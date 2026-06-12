@@ -120,7 +120,12 @@ const Harvest = (() => {
     return [[], []];
   }
 
-  async function listGroups(session, restRoot) {
+  function restRootOf(session) {
+    return ((session && session.portal) || "https://www.arcgis.com/sharing/rest").replace(/\/+$/, "");
+  }
+
+  async function listGroups(session) {
+    const restRoot = restRootOf(session);
     const self = await rest(session, restRoot + "/community/self");
     return (self.groups || []).map(g => ({id: g.id, title: g.title}))
       .sort((a, b) => (a.title.toLowerCase() < b.title.toLowerCase() ? -1 : 1));
@@ -148,7 +153,7 @@ const Harvest = (() => {
   }
 
   async function harvest(session, group, progress) {
-    const restRoot = "https://www.arcgis.com/sharing/rest";
+    const restRoot = restRootOf(session);
     const orgUrl = await orgUrlOf(session, restRoot);
     const today = epochToDate(Date.now());
     const items = await retry(() => groupItems(session, restRoot, group.id));

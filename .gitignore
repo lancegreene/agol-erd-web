@@ -1,0 +1,3 @@
+# harvested data must never land in this public repo
+*.json
+!test/vectors.json

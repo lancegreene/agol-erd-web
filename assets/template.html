@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AGOL Group ERD</title>
+<script>/*__VIS_NETWORK_JS__*/</script>
+<style>
+  :root {
+    --brand:#007AC2; --bg:#f8f8f8; --panel:#ffffff; --bar:#007AC2; --bar-text:#ffffff;
+    --sub:#f3f3f3; --text:#323232; --muted:#6a6a6a; --border:#dfdfdf;
+    --warn-bg:#fef3cd; --warn-text:#6d5a1f; --input-bg:#ffffff; --input-text:#323232;
+    --link:#007AC2;
+    --info-bg:#e8f1fb; --info-text:#1d4f7c; --info-border:#c8ddf0;
+  }
+  [data-theme="dark"] {
+    --brand:#009AF2; --bg:#1a2129; --panel:#232b34; --bar:#2d3b4a; --bar-text:#ffffff;
+    --sub:#222c36; --text:#cdd9e5; --muted:#7e8c9a; --border:#39424d;
+    --warn-bg:#4a3b20; --warn-text:#e8c97a; --input-bg:#1f2933; --input-text:#ffffff;
+    --link:#6da3d8;
+    --info-bg:#1d3349; --info-text:#9cc4e8; --info-border:#2c4a66;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Avenir Next","Avenir","Segoe UI",system-ui,sans-serif;
+         background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
+  #titlebar { background:var(--bar); color:var(--bar-text); padding:8px 14px;
+              display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  #titlebar .meta { color:rgba(255,255,255,0.75); font-size:.85em; margin-left:10px; }
+  #controls { display:flex; gap:6px; align-items:center; }
+  #controls button, #controls select {
+    background:rgba(255,255,255,0.15); color:var(--bar-text); border:1px solid rgba(255,255,255,0.35);
+    border-radius:4px; padding:3px 10px; cursor:pointer; font:inherit; font-size:.85em; }
+  #search { width:170px; padding:4px 8px; border:1px solid var(--border); border-radius:4px;
+            background:var(--input-bg); color:var(--input-text); }
+  #banner { background:var(--warn-bg); color:var(--warn-text); padding:6px 14px; font-size:.85em;
+            display:none; justify-content:space-between; gap:10px; align-items:baseline; }
+  #bannerClose { cursor:pointer; flex-shrink:0; }
+  #diffstrip { background:var(--info-bg); color:var(--info-text); padding:6px 14px;
+               font-size:.85em; display:none; justify-content:space-between; gap:10px;
+               align-items:baseline; border-bottom:1px solid var(--info-border); }
+  #diffClose { cursor:pointer; flex-shrink:0; }
+  #filterbar { background:var(--sub); padding:6px 14px; font-size:.85em; display:flex; gap:14px;
+               flex-wrap:wrap; align-items:center; border-bottom:1px solid var(--border); }
+  #filterbar label { cursor:pointer; user-select:none; }
+  #main { flex:1; display:flex; min-height:0; }
+  #canvas { flex:1; background:var(--bg); }
+  #details { width:270px; background:var(--panel); border-left:1px solid var(--border);
+             padding:12px; font-size:.85em; overflow-y:auto; display:none; }
+  #details h3 { margin:0 0 2px; color:var(--brand); font-size:1.05em; }
+  #details .type { color:var(--muted); margin-bottom:10px; }
+  #details .label { font-size:.75em; text-transform:uppercase; letter-spacing:.05em;
+                    color:var(--muted); margin-top:10px; }
+  #details a { color:var(--link); }
+  #details .warn { color:var(--warn-text); background:var(--warn-bg); padding:4px 6px;
+                   border-radius:4px; margin-top:10px; }
+  #details button { background:var(--brand); color:#fff; border:none; border-radius:4px;
+                    padding:5px 10px; cursor:pointer; font:inherit; font-size:.9em;
+                    margin:2px 4px 0 0; }
+  #details .actions { margin:8px 0 4px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  #details .actions a { display:inline-block; margin-top:6px; }
+  #hint { position:fixed; bottom:8px; left:10px; color:var(--muted); font-size:.75em; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="titlebar">
+  <div><strong id="title"></strong><span class="meta" id="meta"></span></div>
+  <div id="controls">
+    <input id="search" placeholder="&#128269; find item&hellip; (Enter)">
+    <select id="layoutSel" title="Layout">
+      <option value="force">Force</option>
+      <option value="hier">Hierarchy</option>
+    </select>
+    <button id="themeBtn" title="Toggle light/dark">&#127769;</button>
+    <button id="pngBtn" title="Export PNG snapshot">&#128247; PNG</button>
+  </div>
+</div>
+<div id="banner"><span id="bannerText"></span><span id="bannerClose">&#10005; dismiss</span></div>
+<div id="diffstrip"><span id="diffText"></span><span id="diffClose">&#10005; dismiss</span></div>
+<div id="filterbar"><span style="color:var(--muted)">Show:</span></div>
+<div id="main">
+  <div id="canvas"></div>
+  <div id="details"></div>
+</div>
+<div id="hint">scroll = zoom &middot; drag = pan/move &middot; click = details &middot; double-click service = expand/collapse</div>
+<script>
+const GRAPH = /*__GRAPH_JSON__*/null;
+const DIFF = GRAPH.meta.diff || null;
+const NEW_IDS = new Set(DIFF ? DIFF.addedItems.map(it => it.id) : []);
+const diffEdgeKey = e => e.from + "|" + e.to + "|" + e.kind + "|" + (e.toLayer != null ? e.toLayer : "");
+const ADDED_EDGE_KEYS = new Set(DIFF ? DIFF.addedEdges.map(diffEdgeKey) : []);
+// May include ids of REMOVED items (endpoints of removed edges) — harmless:
+// they have no node in GRAPH.nodes, so no badge ever renders for them.
+const CHANGED_IDS = new Set();
+if (DIFF) {
+  DIFF.addedEdges.concat(DIFF.removedEdges).forEach(e => {
+    [e.from, e.to].forEach(id => { if (!NEW_IDS.has(id)) CHANGED_IDS.add(id); });
+  });
+  DIFF.layerChanges.forEach(ch => { if (!NEW_IDS.has(ch.id)) CHANGED_IDS.add(ch.id); });
+}
+const DIFF_HAS_CHANGES = !!(DIFF && (DIFF.addedItems.length || DIFF.removedItems.length ||
+  DIFF.addedEdges.length || DIFF.removedEdges.length || DIFF.layerChanges.length));
+
+const TYPE_STYLES = {
+  "Feature Service":    {color:"#3b6ea5", level:0},
+  "Map Image Service":  {color:"#2f5f8f", level:0},
+  "External Service":   {color:"#5a6672", level:0},
+  "Web Map":            {color:"#4a8f5c", level:1},
+  "Web Scene":          {color:"#3f7d50", level:1},
+  "Experience Builder": {color:"#c4763a", level:2},
+  "Web AppBuilder":     {color:"#b56a32", level:2},
+  "Instant App":        {color:"#cf8a52", level:2},
+  "StoryMap":           {color:"#c9a227", level:2},
+  "Dashboard":          {color:"#b3a13c", level:2},
+  "Survey123 Form":     {color:"#9a6db0", level:2},
+};
+const FALLBACK_STYLE = {color:"#5a6672", level:1};
+const styleFor = n => TYPE_STYLES[n.type] || FALLBACK_STYLE;
+
+const THEMES = {
+  light: {edge:"#8a939c", legendBg:"rgba(255,255,255,0.92)", legendBorder:"#dfdfdf",
+          legendText:"#323232", canvasBg:"#f8f8f8"},
+  dark:  {edge:"#5b7891", legendBg:"rgba(35,43,52,0.92)", legendBorder:"#39424d",
+          legendText:"#cdd9e5", canvasBg:"#1a2129"},
+};
+let themeName = "light";
+let THEME = THEMES[themeName];
+let legendOn = true;
+
+document.getElementById("title").textContent = GRAPH.meta.group + " — ERD";
+document.getElementById("meta").textContent =
+  GRAPH.meta.org + " · generated " + GRAPH.meta.generated + " · " +
+  GRAPH.nodes.length + " items, " + GRAPH.edges.length + " links";
+
+// --- Node / edge factories ---------------------------------------------
+const labelEsc = s => String(s).replace(/[&<>]/g,
+  c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"}[c]));
+
+function nodeLabel(n) {
+  const t = n.title != null ? String(n.title) : String(n.id);
+  const short = t.length > 30 ? t.slice(0, 29) + "…" : t;
+  const badge = NEW_IDS.has(n.id) ? " · new" : CHANGED_IDS.has(n.id) ? " · changed" : "";
+  return (n.parseWarning ? "⚠ " : "") + labelEsc(short) + "\n<i>" + labelEsc(n.type) + badge + "</i>";
+}
+
+function visNode(n) {
+  const s = styleFor(n);
+  const spec = {
+    id: n.id, label: nodeLabel(n), level: s.level, shape: "box", margin: 8,
+    font: {color: "#fff", size: 13, multi: "html"},
+    color: n.external
+      ? {background: "#39424d", border: "#888", highlight: {background: "#46525f", border: "#aaa"}}
+      : {background: s.color, border: s.color, highlight: {background: s.color, border: "#fff"}},
+    shapeProperties: n.external ? {borderDashes: [6, 3]} : {},
+    borderWidth: 1,
+  };
+  const badgeBorder = NEW_IDS.has(n.id) ? "#2e9e44" : CHANGED_IDS.has(n.id) ? "#e0a230" : null;
+  if (badgeBorder) {
+    spec.color.border = badgeBorder;
+    spec.color.highlight.border = badgeBorder;
+    spec.borderWidth = 3;
+  }
+  return spec;
+}
+
+function edgeColor(e) {
+  if (e && ADDED_EDGE_KEYS.has(diffEdgeKey(e))) return "#2e9e44";
+  if (e && e.kind === "form-submits-to") return "#8a6da0";
+  if (e && e.kind === "view-of") return "#3f8f8f";
+  return THEME.edge;
+}
+
+function visEdge(e, i) {
+  return {id: i, from: e.from, to: e.to, arrows: "to",
+          title: e.kind + (e.toLayer != null ? " (layer " + e.toLayer + ")" : ""),
+          width: ADDED_EDGE_KEYS.has(diffEdgeKey(e)) ? 2 : 1,
+          color: {color: edgeColor(e)}};
+}
+
+const nodesDS = new vis.DataSet(GRAPH.nodes.map(visNode));
+const edgesDS = new vis.DataSet(GRAPH.edges.map((e, i) => visEdge(e, i)));
+
+const HIER_OPTS = {hierarchical: {enabled: true, direction: "LR", levelSeparation: 280,
+                                  nodeSpacing: 90, treeSpacing: 120}};
+const FORCE_PHYSICS = {
+  enabled: true,
+  // forceAtlas2 + avoidOverlap spreads labeled boxes instead of piling them;
+  // tuned live against a 121-node / 685-edge real-world graph.
+  solver: "forceAtlas2Based",
+  forceAtlas2Based: {gravitationalConstant: -120, centralGravity: 0.025,
+                     springLength: 130, springConstant: 0.04, avoidOverlap: 0.7},
+  stabilization: {iterations: 300},
+};
+const network = new vis.Network(document.getElementById("canvas"),
+  {nodes: nodesDS, edges: edgesDS},
+  {layout: {hierarchical: {enabled: false}}, physics: FORCE_PHYSICS, interaction: {hover: true}});
+
+// Freeze the simulation once it settles so dragging moves ONE node, not the
+// whole graph. Dense graphs never reach vis-network's live "stabilized"
+// equilibrium, so freeze on the batch-stabilization event (guaranteed to
+// fire) with "stabilized" and a timer as backstops. Re-armed on force entry.
+let freezeAfterStabilize = true;
+let freezeTimer = null;
+
+function freezeNow() {
+  if (!freezeAfterStabilize) return;
+  freezeAfterStabilize = false;
+  if (freezeTimer) { clearTimeout(freezeTimer); freezeTimer = null; }
+  network.setOptions({physics: {enabled: false}});
+}
+
+function armFreeze() {
+  freezeAfterStabilize = true;
+  if (freezeTimer) clearTimeout(freezeTimer);
+  freezeTimer = setTimeout(freezeNow, 8000);
+}
+
+network.on("stabilizationIterationsDone", freezeNow);
+network.on("stabilized", freezeNow);
+armFreeze();
+
+const byId = Object.fromEntries(GRAPH.nodes.map(n => [n.id, n]));
+
+// --- Warnings banner ----------------------------------------------------
+if (GRAPH.meta.warnings && GRAPH.meta.warnings.length) {
+  const banner = document.getElementById("banner");
+  document.getElementById("bannerText").textContent =
+    "⚠ " + GRAPH.meta.warnings.length + " item(s) could not be fully parsed: " +
+    GRAPH.meta.warnings.join(" · ");
+  banner.style.display = "flex";
+  document.getElementById("bannerClose").addEventListener("click", () => {
+    banner.style.display = "none";
+  });
+}
+
+// --- Changes strip (diff vs previous run) ---------------------------------
+if (DIFF_HAS_CHANGES) {
+  const strip = document.getElementById("diffstrip");
+  const bits = [];
+  if (DIFF.addedItems.length) bits.push("+" + DIFF.addedItems.length + " item" + (DIFF.addedItems.length !== 1 ? "s" : ""));
+  if (DIFF.removedItems.length) bits.push("−" + DIFF.removedItems.length + " item" + (DIFF.removedItems.length !== 1 ? "s" : "") +
+    " (" + DIFF.removedItems.map(it => it.title).join(", ") + ")");
+  const rel = DIFF.addedEdges.length + DIFF.removedEdges.length;
+  if (rel) bits.push(rel + " relationship change" + (rel !== 1 ? "s" : ""));
+  if (DIFF.layerChanges.length) bits.push(DIFF.layerChanges.length + " service schema change" + (DIFF.layerChanges.length !== 1 ? "s" : ""));
+  document.getElementById("diffText").textContent = "Δ Changes since " + DIFF.comparedTo + ": " + bits.join(" · ");
+  strip.style.display = "flex";
+  document.getElementById("diffClose").addEventListener("click", () => {
+    strip.style.display = "none";
+  });
+}
+
+// --- Filters ------------------------------------------------------------
+const typesPresent = [...new Set(GRAPH.nodes.filter(n => !n.external).map(n => n.type))].sort();
+const filterState = Object.fromEntries(typesPresent.map(t => [t, true]));
+filterState.__external = true;
+const filterbar = document.getElementById("filterbar");
+
+function addFilter(label, key, color) {
+  const el = document.createElement("label");
+  el.innerHTML = '<input type="checkbox" checked> <span style="color:' + color + '">' + label + "</span>";
+  el.querySelector("input").addEventListener("change", ev => {
+    filterState[key] = ev.target.checked;
+    applyFilters();
+  });
+  filterbar.appendChild(el);
+}
+typesPresent.forEach(t => addFilter(t, t, (TYPE_STYLES[t] || FALLBACK_STYLE).color));
+if (GRAPH.nodes.some(n => n.external)) addFilter("External items", "__external", "#999");
+if (GRAPH.nodes.some(n => n.external)) {
+  const clusterLabel = document.createElement("label");
+  clusterLabel.innerHTML = '<input type="checkbox" checked> <span style="color:#999">Cluster externals</span>';
+  clusterLabel.querySelector("input").addEventListener("change", ev => {
+    clusterOn = ev.target.checked;
+    if (clusterOn) applyClustering(); else clearClustering();
+  });
+  filterbar.appendChild(clusterLabel);
+}
+
+const legendLabel = document.createElement("label");
+legendLabel.style.marginLeft = "auto";
+legendLabel.innerHTML = '<input type="checkbox" checked> Legend';
+legendLabel.querySelector("input").addEventListener("change", ev => {
+  legendOn = ev.target.checked;
+  network.redraw();
+});
+filterbar.appendChild(legendLabel);
+
+const fitBtn = document.createElement("button");
+fitBtn.textContent = "Fit";
+fitBtn.style.cssText = "padding:2px 12px;cursor:pointer;font:inherit;font-size:.95em";
+fitBtn.addEventListener("click", () => {
+  // With a focus active, fit to the bright chain instead of the whole graph.
+  if (focusedId) {
+    const rel = relatedBaseIds(focusedId, focusMode);
+    const ids = nodesDS.get().filter(nd => rel.has(baseId(nd.id))).map(nd => nd.id);
+    if (ids.length) {
+      network.fit({nodes: ids, animation: true});
+      return;
+    }
+  }
+  network.fit({animation: true});
+});
+filterbar.appendChild(fitBtn);
+
+function isHidden(n) {
+  return n.external ? !filterState.__external : !filterState[n.type];
+}
+
+function applyFilters() {
+  const updates = nodesDS.get().map(nd => {
+    const s = String(nd.id);
+    if (s.startsWith("cl::")) return {id: nd.id, hidden: !filterState.__external};
+    const base = byId[baseId(nd.id)];
+    return {id: nd.id, hidden: base ? isHidden(base) : false};
+  });
+  nodesDS.update(updates);
+}
+
+// --- Expansion (manual node/edge swap) -----------------------------------
+const expanded = new Map();
+const EXPANDABLE = new Set(["Feature Service", "Map Image Service"]);
+
+network.on("doubleClick", params => {
+  if (!params.nodes.length) return;
+  const id = params.nodes[0];
+  if (clusters.has(id)) { expandCluster(id); return; }
+  if (expanded.has(id)) collapseService(id);
+  else expandService(id);
+});
+
+function expandService(id) {
+  const n = byId[id];
+  if (!n || !EXPANDABLE.has(n.type) || !(n.layers && n.layers.length) || expanded.has(id)) return;
+  const childIds = [], addedEdges = [], removedEdges = [];
+  const parentPos = (network.getPositions([id]) || {})[id] || {x: 0, y: 0};
+  n.layers.forEach((l, li) => {
+    const cid = id + "::" + l.index;
+    childIds.push(cid);
+    nodesDS.add({
+      id: cid,
+      label: labelEsc(l.name) + "\n<i>" + (l.isTable ? "Table " : "Layer ") + l.index + "</i>",
+      level: styleFor(n).level, shape: "box", margin: 6,
+      x: parentPos.x + 200, y: parentPos.y + (li - (n.layers.length - 1) / 2) * 80,
+      font: {color: "#fff", size: 11, multi: "html"},
+      color: {background: l.isTable ? "#5b86b5" : styleFor(n).color, border: "#fff"},
+    });
+    const ceid = "c::" + cid;
+    edgesDS.add({id: ceid, from: id, to: cid, dashes: [2, 3], arrows: "",
+                 color: {color: THEME.edge}});
+    addedEdges.push(ceid);
+  });
+  GRAPH.edges.forEach((e, i) => {
+    if (e.to === id && e.toLayer != null && childIds.includes(id + "::" + e.toLayer)) {
+      edgesDS.remove(i);
+      removedEdges.push(i);
+      const rid = "r::" + i;
+      edgesDS.add({id: rid, from: e.from, to: id + "::" + e.toLayer, arrows: "to",
+                   title: e.kind + " (layer " + e.toLayer + ")",
+                   width: ADDED_EDGE_KEYS.has(diffEdgeKey(e)) ? 2 : 1,
+                   color: {color: edgeColor(e)}});
+      addedEdges.push(rid);
+    }
+  });
+  nodesDS.update({id, label: nodeLabel(n) + " ⊖"});
+  expanded.set(id, {childIds, addedEdges, removedEdges});
+  if (focusedId) applyFocus();
+}
+
+function collapseService(id) {
+  const st = expanded.get(id);
+  if (!st) return;
+  st.addedEdges.forEach(eid => edgesDS.remove(eid));
+  st.childIds.forEach(cid => nodesDS.remove(cid));
+  st.removedEdges.forEach(i => edgesDS.add(visEdge(GRAPH.edges[i], i)));
+  nodesDS.update({id, label: nodeLabel(byId[id])});
+  expanded.delete(id);
+  if (focusedId) applyFocus();
+}
+
+// --- Focus mode (grey out everything not in the selected item's chain) ----
+let focusedId = null;
+let focusMode = "all";  // "all" = every connection; "down" = dependencies only (app→map→service)
+
+function baseId(id) {
+  const s = String(id);
+  return s.includes("::") ? s.split("::")[0] : s;
+}
+
+function relatedBaseIds(start, mode) {
+  const adj = {};
+  GRAPH.edges.forEach(e => {
+    (adj[e.from] = adj[e.from] || []).push(e.to);
+    if (mode !== "down") (adj[e.to] = adj[e.to] || []).push(e.from);
+  });
+  const seen = new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const cur = queue.shift();
+    (adj[cur] || []).forEach(nxt => {
+      if (!seen.has(nxt)) { seen.add(nxt); queue.push(nxt); }
+    });
+  }
+  return seen;
+}
+
+function nodeInRel(visId, rel) {
+  const s = String(visId);
+  if (s.startsWith("cl::")) {
+    const st = clusters.get(s);
+    return !!(st && st.memberIds.some(id => rel.has(id)));
+  }
+  return rel.has(baseId(visId));
+}
+
+function applyFocus() {
+  const rel = focusedId ? relatedBaseIds(focusedId, focusMode) : null;
+  nodesDS.update(nodesDS.get().map(nd => {
+    const dim = rel && !nodeInRel(nd.id, rel);
+    return {
+      id: nd.id,
+      opacity: dim ? 0.15 : 1,
+      font: {color: dim ? "rgba(255,255,255,0.25)" : "#fff", size: nd.font && nd.font.size ? nd.font.size : 13, multi: "html"},
+    };
+  }));
+  edgesDS.update(edgesDS.get().map(ed => {
+    const dim = rel && !(nodeInRel(ed.from, rel) && nodeInRel(ed.to, rel));
+    return {id: ed.id, color: {color: edgeColor(graphEdgeFor(ed.id)), opacity: dim ? 0.12 : 1}};
+  }));
+}
+
+function toggleFocus(id, mode) {
+  if (focusedId === id && focusMode === mode) {
+    restoreGather();
+    focusedId = null;
+  } else {
+    if (focusedId !== id) restoreGather();
+    focusedId = id;
+    focusMode = mode;
+  }
+  applyFocus();
+  showDetails(id);
+}
+
+// --- Gather: pull the focused chain into a compact flow; restore on clear --
+let gatherBackup = null;
+
+function chainLevels(start, mode) {
+  const adj = {};
+  GRAPH.edges.forEach(e => {
+    (adj[e.from] = adj[e.from] || []).push(e.to);
+    if (mode !== "down") (adj[e.to] = adj[e.to] || []).push(e.from);
+  });
+  const level = {[start]: 0};
+  const queue = [start];
+  while (queue.length) {
+    const cur = queue.shift();
+    (adj[cur] || []).forEach(nxt => {
+      if (!(nxt in level)) { level[nxt] = level[cur] + 1; queue.push(nxt); }
+    });
+  }
+  return level;
+}
+
+function gatherChain() {
+  if (!focusedId) return;
+  const levels = chainLevels(focusedId, focusMode);
+  const visIds = nodesDS.get().map(nd => nd.id).filter(id => baseId(id) in levels);
+  if (!visIds.length) return;
+  const fresh = visIds.filter(id => !gatherBackup || !(id in gatherBackup));
+  gatherBackup = Object.assign(gatherBackup || {}, network.getPositions(fresh));
+  const anchor = network.getPositions([focusedId])[focusedId];
+  const byLevel = {};
+  visIds.forEach(id => {
+    // expansion children sit half a column past their parent service
+    const l = levels[baseId(id)] + (String(id).includes("::") ? 0.5 : 0);
+    (byLevel[l] = byLevel[l] || []).push(id);
+  });
+  Object.keys(byLevel).map(Number).sort((a, b) => a - b).forEach(l => {
+    const ids = byLevel[l];
+    ids.forEach((id, i) => {
+      network.moveNode(id, anchor.x + l * 240, anchor.y + (i - (ids.length - 1) / 2) * 90);
+    });
+  });
+  // animation:false — an animated fit right after moveNode targets the
+  // stale pre-move bounding box and under-zooms.
+  network.fit({nodes: visIds, animation: false});
+}
+
+function restoreGather() {
+  if (!gatherBackup) return;
+  Object.entries(gatherBackup).forEach(([id, p]) => {
+    if (nodesDS.get(id) !== null) network.moveNode(id, p.x, p.y);
+  });
+  gatherBackup = null;
+}
+
+// --- External clustering (by server domain) --------------------------------
+// externalDomain mirrors _external_domain() in erd_generator/report.py —
+// keep the two in sync.
+function externalDomain(n) {
+  for (const v of [n.id, n.url, n.title]) {
+    if (typeof v === "string") {
+      const m = v.match(/:\/\/([^/]+)/);
+      if (m && m[1].trim()) return m[1].trim().toLowerCase();
+    }
+  }
+  return "other external items";
+}
+
+let clusterOn = true;
+const clusters = new Map();        // cluster id -> {domain, memberIds, removedEdges, addedEdgeIds}
+const memberToCluster = new Map(); // member node id -> cluster id
+
+function applyClustering() {
+  clearClustering();
+  const groups = new Map();
+  GRAPH.nodes.filter(n => n.external).forEach(n => {
+    const d = externalDomain(n);
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push(n.id);
+  });
+  groups.forEach((memberIds, domain) => {
+    if (memberIds.length < 2) return;
+    const clId = "cl::" + domain;
+    const pos = network.getPositions(memberIds);
+    const pts = memberIds.map(id => pos[id]).filter(Boolean);
+    const hasChanges = memberIds.some(id => NEW_IDS.has(id) || CHANGED_IDS.has(id));
+    const node = {
+      id: clId,
+      label: "⬢ " + labelEsc(domain) + "\n<i>" + memberIds.length + " services" +
+        (hasChanges ? " · contains changes" : "") + "</i>",
+      level: 0, shape: "box", margin: 8,
+      font: {color: "#fff", size: 13, multi: "html"},
+      color: {background: "#39424d", border: hasChanges ? "#e0a230" : "#888",
+              highlight: {background: "#46525f", border: hasChanges ? "#e0a230" : "#aaa"}},
+      shapeProperties: {borderDashes: [6, 3]},
+      borderWidth: hasChanges ? 3 : 1,
+      hidden: !filterState.__external,
+    };
+    if (pts.length) {
+      node.x = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      node.y = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    }
+    const removedEdges = [];
+    const addedEdgeIds = [];
+    const seenPairs = new Set();
+    edgesDS.get().forEach(ed => {
+      const nf = memberIds.includes(ed.from) ? clId : ed.from;
+      const nt = memberIds.includes(ed.to) ? clId : ed.to;
+      if (nf === ed.from && nt === ed.to) return;
+      edgesDS.remove(ed.id);
+      removedEdges.push(ed);
+      const pair = nf + "→" + nt;
+      if (seenPairs.has(pair)) return;
+      seenPairs.add(pair);
+      const xid = "x::" + ed.id;
+      edgesDS.add({id: xid, from: nf, to: nt, arrows: "to",
+                   title: ed.title, width: ed.width || 1,
+                   color: {color: edgeColor(graphEdgeFor(ed.id))}});
+      addedEdgeIds.push(xid);
+    });
+    memberIds.forEach(id => {
+      nodesDS.remove(id);
+      memberToCluster.set(id, clId);
+    });
+    nodesDS.add(node);
+    clusters.set(clId, {domain, memberIds, removedEdges, addedEdgeIds});
+  });
+  if (focusedId) applyFocus();
+}
+
+function expandCluster(clId) {
+  const st = clusters.get(clId);
+  if (!st) return;
+  const pos = (network.getPositions([clId]) || {})[clId] || {x: 0, y: 0};
+  st.addedEdgeIds.forEach(eid => edgesDS.remove(eid));
+  nodesDS.remove(clId);
+  st.memberIds.forEach((id, i) => {
+    memberToCluster.delete(id);
+    const spec = visNode(byId[id]);
+    spec.x = pos.x + 180;
+    spec.y = pos.y + (i - (st.memberIds.length - 1) / 2) * 70;
+    spec.hidden = !filterState.__external;
+    nodesDS.add(spec);
+  });
+  st.removedEdges.forEach(ed => {
+    if (!edgesDS.get(ed.id)) edgesDS.add(ed);
+  });
+  clusters.delete(clId);
+  if (focusedId) applyFocus();
+}
+
+function clearClustering() {
+  [...clusters.keys()].forEach(expandCluster);
+}
+
+function showClusterDetails(clId, matchedTitle) {
+  const st = clusters.get(clId);
+  if (!st) return;
+  let html = "<h3>" + esc(st.domain) + "</h3><div class='type'>External server · " +
+    st.memberIds.length + " services</div>";
+  if (matchedTitle) html += "<div class='warn'>Search match inside: " + esc(matchedTitle) + "</div>";
+  html += "<div class='label'>Members</div>" + st.memberIds.map(id => {
+    const n = byId[id];
+    const usedBy = GRAPH.edges.filter(e => e.to === id).map(e => byId[e.from]).filter(Boolean);
+    return "• " + esc(n ? n.title : id) +
+      (usedBy.length ? " — used by: " + usedBy.map(u => esc(u.title)).join(", ") : "");
+  }).join("<br>");
+  html += "<div class='label'></div><span style='color:var(--muted)'>Double-click the node to expand</span>";
+  details.innerHTML = html;
+  details.style.display = "block";
+}
+
+// --- Layout toggle --------------------------------------------------------
+document.getElementById("layoutSel").addEventListener("change", ev => {
+  if (ev.target.value === "force") {
+    armFreeze();
+    network.setOptions({layout: {hierarchical: {enabled: false}}, physics: FORCE_PHYSICS});
+    network.stabilize(250);
+  } else {
+    freezeAfterStabilize = false;
+    if (freezeTimer) { clearTimeout(freezeTimer); freezeTimer = null; }
+    network.setOptions({physics: {enabled: false}, layout: HIER_OPTS});
+  }
+  network.fit({animation: true});
+});
+
+// --- Theme toggle ---------------------------------------------------------
+function graphEdgeFor(id) {
+  const s = String(id);
+  if (s.startsWith("r::")) return GRAPH.edges[parseInt(s.slice(3), 10)];
+  if (s.startsWith("x::")) return GRAPH.edges[parseInt(s.slice(3), 10)];
+  if (s.startsWith("c::")) return null;
+  return GRAPH.edges[id];
+}
+
+document.getElementById("themeBtn").addEventListener("click", () => {
+  themeName = themeName === "light" ? "dark" : "light";
+  THEME = THEMES[themeName];
+  document.documentElement.setAttribute("data-theme", themeName === "dark" ? "dark" : "");
+  document.getElementById("themeBtn").innerHTML = themeName === "dark" ? "&#9728;" : "&#127769;";
+  applyFocus();
+  network.redraw();
+});
+
+// --- On-canvas legend (drawn into the canvas => included in PNG) ----------
+function legendEntries() {
+  const entries = typesPresent.map(t => ({label: t, color: (TYPE_STYLES[t] || FALLBACK_STYLE).color, style: "fill"}));
+  if (GRAPH.nodes.some(n => n.external)) entries.push({label: "External (not in group)", color: "#39424d", style: "dashed"});
+  if (DIFF_HAS_CHANGES) {
+    entries.push({label: "New since last run", color: "#2e9e44", style: "border"});
+    entries.push({label: "Changed since last run", color: "#e0a230", style: "border"});
+    if (DIFF.addedEdges.length) entries.push({label: "New relationship", color: "#2e9e44", style: "line"});
+  }
+  return entries;
+}
+
+network.on("afterDrawing", ctx => {
+  if (!legendOn) return;
+  const canvas = ctx.canvas;
+  const ratio = canvas.clientWidth > 0 ? canvas.width / canvas.clientWidth : 1;
+  ctx.save();
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const entries = legendEntries();
+  const lineH = 18, pad = 12, boxW = 185;
+  const boxH = entries.length * lineH + 24;
+  const x = canvas.clientWidth - boxW - pad;
+  const y = canvas.clientHeight - boxH - pad;
+  ctx.fillStyle = THEME.legendBg;
+  ctx.strokeStyle = THEME.legendBorder;
+  ctx.beginPath(); ctx.rect(x, y, boxW, boxH); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = THEME.legendText;
+  ctx.font = "bold 10px 'Avenir Next','Segoe UI',sans-serif";
+  ctx.fillText("LEGEND", x + 10, y + 15);
+  ctx.font = "11px 'Avenir Next','Segoe UI',sans-serif";
+  entries.forEach((entry, i) => {
+    const ey = y + 28 + i * lineH;
+    if (entry.style === "line") {
+      ctx.strokeStyle = entry.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x + 10, ey - 4); ctx.lineTo(x + 20, ey - 4); ctx.stroke();
+      ctx.lineWidth = 1;
+    } else if (entry.style === "border") {
+      ctx.strokeStyle = entry.color;
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(x + 11, ey - 8, 9, 9);
+      ctx.lineWidth = 1;
+    } else {
+      ctx.fillStyle = entry.color;
+      ctx.fillRect(x + 10, ey - 9, 10, 10);
+      if (entry.style === "dashed") {
+        ctx.strokeStyle = THEME.legendText;
+        ctx.setLineDash([3, 2]);
+        ctx.strokeRect(x + 10, ey - 9, 10, 10);
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.fillStyle = THEME.legendText;
+    ctx.fillText(entry.label, x + 27, ey);
+  });
+  ctx.restore();
+});
+
+// --- PNG export -----------------------------------------------------------
+function safeName(s) {
+  return String(s).replace(/[^\w\- ]/g, "").trim().replace(/ /g, "_") || "group";
+}
+
+document.getElementById("pngBtn").addEventListener("click", () => {
+  const src = document.querySelector("#canvas canvas");
+  if (!src) return;
+  const out = document.createElement("canvas");
+  out.width = src.width;
+  out.height = src.height;
+  const octx = out.getContext("2d");
+  octx.fillStyle = THEME.canvasBg;
+  octx.fillRect(0, 0, out.width, out.height);
+  octx.drawImage(src, 0, 0);
+  const a = document.createElement("a");
+  a.download = safeName(GRAPH.meta.group) + "_ERD_" + GRAPH.meta.generated + ".png";
+  a.href = out.toDataURL("image/png");
+  a.click();
+});
+
+// --- Search ---------------------------------------------------------------
+const details = document.getElementById("details");
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+  c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+document.getElementById("search").addEventListener("keydown", ev => {
+  if (ev.key !== "Enter") return;
+  const q = ev.target.value.trim().toLowerCase();
+  if (!q) return;
+  const hit = GRAPH.nodes.find(n => String(n.title || "").toLowerCase().includes(q));
+  if (hit) {
+    const clId = memberToCluster.get(hit.id);
+    if (clId) {
+      const clEntry = nodesDS.get(clId);
+      if (clEntry && clEntry.hidden) {
+        details.innerHTML = "<h3>" + esc(hit.title) + "</h3><div class='warn'>⚠ Found inside a hidden external cluster — re-enable \"External items\" in the filter bar to see it.</div>";
+        details.style.display = "block";
+        return;
+      }
+      network.selectNodes([clId]);
+      network.focus(clId, {scale: 1.0, animation: true});
+      showClusterDetails(clId, hit.title);
+      return;
+    }
+    const visEntry = nodesDS.get(hit.id);
+    if (visEntry && visEntry.hidden) {
+      details.innerHTML = "<h3>" + esc(hit.title) + "</h3><div class='warn'>⚠ Found, but hidden by a filter — re-enable its type in the filter bar to see it.</div>";
+      details.style.display = "block";
+      return;
+    }
+    network.selectNodes([hit.id]);
+    network.focus(hit.id, {scale: 1.0, animation: true});
+    showDetails(hit.id);
+  }
+});
+
+// --- Details panel ----------------------------------------------------------
+function showDetails(rawId) {
+  if (clusters.has(rawId)) { showClusterDetails(rawId); return; }
+  const id = String(rawId).includes("::") ? String(rawId).split("::")[0] : rawId;
+  const n = byId[id];
+  if (!n) return;
+  const usedBy = GRAPH.edges.filter(e => e.to === id).map(e => byId[e.from]).filter(Boolean);
+  const uses = GRAPH.edges.filter(e => e.from === id)
+    .map(e => ({n: byId[e.to], l: e.toLayer})).filter(x => x.n);
+  let html = "<h3>" + esc(n.title) + "</h3><div class='type'>" +
+    esc(n.type) + (n.external ? " · external (not in group)" : "") + "</div>";
+  // Actions live at the TOP so they never scroll out of sight when the
+  // Uses / Used-by lists get long.
+  const isDown = focusedId === id && focusMode === "down";
+  const isAll = focusedId === id && focusMode === "all";
+  html += "<div class='actions'>" +
+    "<button id='focusDownBtn'>" + (isDown ? "Clear focus" : "Focus downstream ▾") + "</button> " +
+    "<button id='focusAllBtn'>" + (isAll ? "Clear focus" : "Focus all connections") + "</button>";
+  if (focusedId === id) {
+    html += " <button id='gatherBtn'>Gather chain</button>";
+  }
+  if (n.url) html += "<div><a href=\"" + esc(n.url) + "\" target=\"_blank\">Open in AGOL ↗</a></div>";
+  html += "</div>";
+  if (n.parseWarning) html += "<div class='warn'>⚠ " + esc(n.parseWarning) + "</div>";
+  if (n.owner) html += "<div class='label'>Owner</div>" + esc(n.owner);
+  if (n.modified) html += "<div class='label'>Modified</div>" + esc(n.modified);
+  if (n.created) html += "<div class='label'>Created</div>" + esc(n.created);
+  if (n.sharing) html += "<div class='label'>Sharing</div>" + esc(n.sharing);
+  if (n.layers && n.layers.length) {
+    html += "<div class='label'>Layers &amp; tables</div>" + n.layers.map(l =>
+      "• " + esc(l.name) + (l.isTable ? " (table " + l.index + ")" : " (" + l.index + ")")).join("<br>");
+  }
+  if (uses.length) html += "<div class='label'>Uses</div>" + uses.map(u =>
+    "↳ " + esc(u.n.title) + (u.l != null ? " · layer " + u.l : "")).join("<br>");
+  if (usedBy.length) html += "<div class='label'>Used by</div>" + usedBy.map(u => "↳ " + esc(u.title)).join("<br>");
+  details.innerHTML = html;
+  details.style.display = "block";
+  const fdb = document.getElementById("focusDownBtn");
+  if (fdb) fdb.addEventListener("click", () => toggleFocus(id, "down"));
+  const fab = document.getElementById("focusAllBtn");
+  if (fab) fab.addEventListener("click", () => toggleFocus(id, "all"));
+  const gb = document.getElementById("gatherBtn");
+  if (gb) gb.addEventListener("click", gatherChain);
+}
+
+network.on("click", params => {
+  if (params.nodes.length) {
+    showDetails(params.nodes[0]);
+  } else {
+    details.style.display = "none";
+    if (focusedId) { restoreGather(); focusedId = null; applyFocus(); }
+  }
+});
+
+// Initial clustering (default on) — runs after all definitions; physics is
+// still stabilizing at load so the cluster nodes get laid out naturally.
+if (clusterOn && GRAPH.nodes.some(n => n.external)) applyClustering();
+</script>
+</body>
+</html>

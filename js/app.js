@@ -112,6 +112,7 @@ if (window.opener && new URLSearchParams(window.location.search).has("code")) {
 
   document.getElementById("generateBtn").addEventListener("click", async () => {
     if (!selectedGroup || !Auth.current()) return;
+    document.getElementById("pickerError").style.display = "none";
     document.getElementById("harvestGroupName").textContent = selectedGroup.title;
     document.getElementById("barFill").style.width = "0";
     document.getElementById("progressLine").textContent = "";
@@ -122,7 +123,6 @@ if (window.opener && new URLSearchParams(window.location.search).has("code")) {
         document.getElementById("progressLine").textContent = done + "/" + total + " · " + title + " — parsing…";
       });
       if (!graph.nodes.length) {
-        document.getElementById("authError").style.display = "none";
         alertEmpty(selectedGroup.title);
         return;
       }
@@ -150,10 +150,10 @@ if (window.opener && new URLSearchParams(window.location.search).has("code")) {
   });
 
   function alertEmpty(title) {
-    const err = document.getElementById("authError");
+    show("picker");
+    const err = document.getElementById("pickerError");
     err.textContent = "Group '" + title + "' is empty — nothing to diagram.";
     err.style.display = "block";
-    show("picker");
   }
 
   function base() {

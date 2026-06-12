@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>load check</title></head>
+<body><div id="ok">loading…</div>
+<script src="../assets/arcgis-rest-request.umd.js"></script>
+<script src="../js/parsers.js"></script>
+<script src="../js/report.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/harvest.js"></script>
+<script>
+document.getElementById("ok").textContent =
+  [typeof arcgisRest, typeof Parsers, typeof Auth, typeof Harvest, typeof Report]
+    .every(t => t === "object" || t === "function") ? "ALL MODULES LOADED" : "MISSING MODULE";
+</script>
+</body></html>

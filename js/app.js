@@ -4,7 +4,7 @@
 // One-time setup: paste the Client ID of the OAuth application item you
 // registered in AGOL (redirect URIs: this page's URL + http://localhost:8000/).
 // PKCE has no secret; this id is public by design.
-const OAUTH_CLIENT_ID = "PASTE_CLIENT_ID_HERE";
+const OAUTH_CLIENT_ID = "bSnDNypZWFua8oXL";
 
 // OAuth popup callback: when ArcGIS redirects back to this page inside the
 // sign-in popup, complete the PKCE exchange and hand the session to the

@@ -43,6 +43,15 @@
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .spacer { margin-left:auto; }
   a { color:var(--brand); }
+  /* Result state fills the whole viewport so the ERD gets the entire page;
+     other states keep the tidy centered column. */
+  body:has(#state-result.active) { height:100vh; overflow:hidden;
+                                   display:flex; flex-direction:column; }
+  body:has(#state-result.active) main { max-width:none; margin:0; flex:1; min-height:0;
+                                        display:flex; flex-direction:column; padding:8px 12px; }
+  #state-result.active { display:flex; flex-direction:column; flex:1; min-height:0; }
+  #state-result.active #viewerFrame { flex:1; height:auto; min-height:0; margin-bottom:6px; }
+  #state-result.active .muted { display:none; }
 </style>
 </head>
 <body>

@@ -167,6 +167,11 @@ function visNode(n) {
     spec.color.highlight.border = badgeBorder;
     spec.borderWidth = 3;
   }
+  // Amber glow on services with empty layers — a separate render channel from
+  // the border (diff state) and fill (type color), so no collision.
+  if (emptyLayerCount(n) > 0) {
+    spec.shadow = {enabled: true, color: "#e0a230", size: 16, x: 0, y: 0};
+  }
   return spec;
 }
 

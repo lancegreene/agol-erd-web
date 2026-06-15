@@ -60,6 +60,16 @@ const Harvest = (() => {
     return resp;
   }
 
+  async function recordCount(session, serviceBase, layerId) {
+    try {
+      const r = await retry(() => rest(session, serviceBase + "/" + layerId + "/query",
+        {where: "1=1", returnCountOnly: "true"}));
+      return typeof r.count === "number" ? r.count : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function addWarning(node, message) {
     node.parseWarning = node.parseWarning ? node.parseWarning + "; " + message : message;
   }
@@ -82,9 +92,15 @@ const Harvest = (() => {
       if (isAgolHost(item.url)) {
         try {
           const svc = await retry(() => rest(session, item.url));
-          const layers = (svc.layers || []).map(l => ({name: l.name, index: l.id, isTable: false}));
-          const tables = (svc.tables || []).map(t => ({name: t.name, index: t.id, isTable: true}));
-          node.layers = layers.concat(tables);
+          const base = item.url.replace(/\/+$/, "");
+          const layers = [];
+          for (const l of (svc.layers || []))
+            layers.push({name: l.name, index: l.id, isTable: false,
+                         recordCount: await recordCount(session, base, l.id)});
+          for (const t of (svc.tables || []))
+            layers.push({name: t.name, index: t.id, isTable: true,
+                         recordCount: await recordCount(session, base, t.id)});
+          node.layers = layers;
         } catch (e) {
           addWarning(node, "could not list layers: " + e.message);
         }

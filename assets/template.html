@@ -99,6 +99,10 @@ if (DIFF) {
 }
 const DIFF_HAS_CHANGES = !!(DIFF && (DIFF.addedItems.length || DIFF.removedItems.length ||
   DIFF.addedEdges.length || DIFF.removedEdges.length || DIFF.layerChanges.length));
+const UNUSED_IDS = new Set(Insights.computeUnusedServices(GRAPH).map(s => s.id));
+function emptyLayerCount(n) {
+  return (n.layers || []).filter(l => l.recordCount === 0).length;
+}
 
 const TYPE_STYLES = {
   "Feature Service":    {color:"#3b6ea5", level:0},
@@ -138,8 +142,12 @@ const labelEsc = s => String(s).replace(/[&<>]/g,
 function nodeLabel(n) {
   const t = n.title != null ? String(n.title) : String(n.id);
   const short = t.length > 30 ? t.slice(0, 29) + "…" : t;
-  const badge = NEW_IDS.has(n.id) ? " · new" : CHANGED_IDS.has(n.id) ? " · changed" : "";
-  return (n.parseWarning ? "⚠ " : "") + labelEsc(short) + "\n<i>" + labelEsc(n.type) + badge + "</i>";
+  const diff = NEW_IDS.has(n.id) ? " · new" : CHANGED_IDS.has(n.id) ? " · changed" : "";
+  const unused = UNUSED_IDS.has(n.id) ? " · unused" : "";
+  const ec = emptyLayerCount(n);
+  const empty = ec ? " · ⌀" + ec + " empty" : "";
+  return (n.parseWarning ? "⚠ " : "") + labelEsc(short) +
+    "\n<i>" + labelEsc(n.type) + diff + unused + empty + "</i>";
 }
 
 function visNode(n) {
@@ -257,13 +265,24 @@ const filterbar = document.getElementById("filterbar");
 
 function addFilter(label, key, color) {
   const el = document.createElement("label");
-  el.innerHTML = '<input type="checkbox" checked> <span style="color:' + color + '">' + label + "</span>";
+  el.innerHTML = '<input type="checkbox" data-role="filter" checked> <span style="color:' + color + '">' + label + "</span>";
   el.querySelector("input").addEventListener("change", ev => {
     filterState[key] = ev.target.checked;
     applyFilters();
   });
   filterbar.appendChild(el);
 }
+function setAllFilters(on) {
+  Object.keys(filterState).forEach(k => { filterState[k] = on; });
+  filterbar.querySelectorAll('input[data-role="filter"]').forEach(cb => { cb.checked = on; });
+  applyFilters();
+}
+const toggleSpan = document.createElement("span");
+toggleSpan.style.cssText = "color:var(--brand);font-size:.85em;margin-right:4px";
+toggleSpan.innerHTML = '(<a href="#" id="filterAll">all</a> · <a href="#" id="filterNone">none</a>)';
+filterbar.appendChild(toggleSpan);
+toggleSpan.querySelector("#filterAll").addEventListener("click", e => { e.preventDefault(); setAllFilters(true); });
+toggleSpan.querySelector("#filterNone").addEventListener("click", e => { e.preventDefault(); setAllFilters(false); });
 typesPresent.forEach(t => addFilter(t, t, (TYPE_STYLES[t] || FALLBACK_STYLE).color));
 if (GRAPH.nodes.some(n => n.external)) addFilter("External items", "__external", "#999");
 if (GRAPH.nodes.some(n => n.external)) {
@@ -302,6 +321,40 @@ fitBtn.addEventListener("click", () => {
 });
 filterbar.appendChild(fitBtn);
 
+const insightsBtn = document.createElement("button");
+insightsBtn.textContent = "📊 Insights";
+insightsBtn.style.cssText = "padding:2px 12px;cursor:pointer;font:inherit;font-size:.95em;margin-left:6px";
+insightsBtn.addEventListener("click", showInsights);
+filterbar.appendChild(insightsBtn);
+
+function insightSection(title, lines) {
+  if (!lines.length) return "";
+  return "<div class='label'>" + esc(title) + " (" + lines.length + ")</div>" + lines.join("<br>");
+}
+
+function showInsights() {
+  const empties = Insights.computeEmptyLayers(GRAPH).map(e =>
+    esc(e.service) + " → " + esc(e.layer) + " (" + (e.isTable ? "table " : "layer ") + e.index + ")");
+  const unused = Insights.computeUnusedServices(GRAPH).map(s => esc(s.title));
+  const stale = Insights.computeStaleItems(GRAPH).map(s =>
+    esc(s.title) + " <span style='color:var(--muted)'>· " + esc(s.modified) + "</span>");
+  const owners = Insights.computeOwners(GRAPH).map(o =>
+    esc(o.owner) + " <b>— " + o.count + "</b>");
+
+  let html = "<h3>Group Insights</h3><div class='type'>" + esc(GRAPH.meta.group) +
+    " · " + GRAPH.nodes.length + " items</div>";
+  html += insightSection("⌀ Empty layers & tables", empties);
+  if (unused.length) {
+    html += "<div class='label'>⚠ Unused services (" + unused.length + ")</div>" +
+      "<div style='color:var(--muted);font-size:.85em'>in this group — referenced by nothing " +
+      "(a service used by content outside the group will appear here)</div>" + unused.join("<br>");
+  }
+  html += insightSection("🕒 Stale items — not modified in " + Insights.STALE_MONTHS + "+ mo", stale);
+  html += insightSection("👤 Owners", owners);
+  details.innerHTML = html;
+  details.style.display = "block";
+}
+
 function isHidden(n) {
   return n.external ? !filterState.__external : !filterState[n.type];
 }
@@ -338,11 +391,15 @@ function expandService(id) {
     childIds.push(cid);
     nodesDS.add({
       id: cid,
-      label: labelEsc(l.name) + "\n<i>" + (l.isTable ? "Table " : "Layer ") + l.index + "</i>",
+      label: labelEsc(l.name) + "\n<i>" + (l.isTable ? "Table " : "Layer ") + l.index +
+             (l.recordCount === 0 ? " · empty" : l.recordCount != null ? " · " + l.recordCount : "") + "</i>",
       level: styleFor(n).level, shape: "box", margin: 6,
       x: parentPos.x + 200, y: parentPos.y + (li - (n.layers.length - 1) / 2) * 80,
       font: {color: "#fff", size: 11, multi: "html"},
-      color: {background: l.isTable ? "#5b86b5" : styleFor(n).color, border: "#fff"},
+      color: {background: l.isTable ? "#5b86b5" : styleFor(n).color,
+              border: l.recordCount === 0 ? "#e0a230" : "#fff"},
+      borderWidth: l.recordCount === 0 ? 2 : 1,
+      shapeProperties: l.recordCount === 0 ? {borderDashes: [4, 2]} : {},
     });
     const ceid = "c::" + cid;
     edgesDS.add({id: ceid, from: id, to: cid, dashes: [2, 3], arrows: "",
@@ -787,8 +844,14 @@ function showDetails(rawId) {
   if (n.created) html += "<div class='label'>Created</div>" + esc(n.created);
   if (n.sharing) html += "<div class='label'>Sharing</div>" + esc(n.sharing);
   if (n.layers && n.layers.length) {
-    html += "<div class='label'>Layers &amp; tables</div>" + n.layers.map(l =>
-      "• " + esc(l.name) + (l.isTable ? " (table " + l.index + ")" : " (" + l.index + ")")).join("<br>");
+    html += "<div class='label'>Layers &amp; tables</div>" + n.layers.map(l => {
+      const where = l.isTable ? " (table " + l.index + ")" : " (" + l.index + ")";
+      let count;
+      if (l.recordCount === 0) count = " — <span style='color:#e0a230'>0 · empty</span>";
+      else if (l.recordCount != null) count = " — " + l.recordCount;
+      else count = " — count unavailable";
+      return "• " + esc(l.name) + where + count;
+    }).join("<br>");
   }
   if (uses.length) html += "<div class='label'>Uses</div>" + uses.map(u =>
     "↳ " + esc(u.n.title) + (u.l != null ? " · layer " + u.l : "")).join("<br>");

@@ -24,6 +24,15 @@ your token or your data.
     python -m http.server 8000
     # then open http://localhost:8000/  (sign-in works via the localhost redirect URI)
 
+## Viewer features
+
+The interactive viewer in both the CLI and web app provides:
+
+- **Insights** button (📊) summarizes unused services, stale items, owners,
+  and empty layers; the "Show" row has an **all · none** toggle. Feature
+  services show **record counts** per layer (empty layers flagged), and
+  services with empty layers / no references are flagged on the node.
+
 ## Parity tests
 
 `test/tests.html` checks the JS ports against vectors generated from the

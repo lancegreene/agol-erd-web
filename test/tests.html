@@ -8,6 +8,7 @@
 <div id="out">loading…</div>
 <script src="../js/parsers.js"></script>
 <script src="../js/report.js"></script>
+<script src="../assets/insights.js"></script>
 <script>
 window.__results = {pass: 0, fail: 0, failures: []};
 const out = document.getElementById("out");
@@ -82,6 +83,37 @@ fetch("vectors.json").then(r => r.json()).then(v => {
     div.textContent = "(report.js not present yet — skipping its categories)";
     out.appendChild(div);
   }
+  // --- Insights unit tests (JS-only; no Python counterpart) ----------------
+  const ig = {
+    meta: {group: "I", org: "o", generated: "2026-06-15", warnings: []},
+    nodes: [
+      {id: "s1", title: "Used Svc", type: "Feature Service", external: false,
+       owner: "ann", modified: "2026-06-01",
+       layers: [{name: "L0", index: 0, isTable: false, recordCount: 5},
+                {name: "L1", index: 1, isTable: false, recordCount: 0}]},
+      {id: "s2", title: "Lonely Svc", type: "Feature Service", external: false,
+       owner: "ann", modified: "2020-01-01", layers: []},
+      {id: "m1", title: "Map", type: "Web Map", external: false,
+       owner: "bob", modified: "2026-06-01", layers: []},
+      {id: "x1", title: "Ext", type: "External Service", external: true,
+       owner: null, modified: null,
+       layers: [{name: "EL", index: 0, isTable: false, recordCount: 0}]},
+    ],
+    edges: [{from: "m1", to: "s1", kind: "webmap-uses-service"}],
+  };
+  // empty layers: only s1/L1 (external x1 excluded)
+  check("insights.emptyLayers", 0,
+    Insights.computeEmptyLayers(ig).map(e => e.serviceId + ":" + e.index), ["s1:1"]);
+  // unused services: s2 (no incoming edge); s1 is used by m1; m1 is not a service; x1 external
+  check("insights.unused", 0,
+    Insights.computeUnusedServices(ig).map(s => s.id), ["s2"]);
+  // stale at 18mo from a fixed now (2026-06-15): s2 (2020) stale; others recent
+  check("insights.stale", 0,
+    Insights.computeStaleItems(ig, Date.parse("2026-06-15T00:00:00"), 18).map(s => s.id), ["s2"]);
+  // owners: ann 2, bob 1 (external excluded), most-first
+  check("insights.owners", 0,
+    Insights.computeOwners(ig).map(o => o.owner + ":" + o.count), ["ann:2", "bob:1"]);
+
   const sum = document.createElement("div");
   sum.className = window.__results.fail ? "fail" : "pass";
   sum.textContent = "RESULT: " + window.__results.pass + " pass, " + window.__results.fail + " fail";

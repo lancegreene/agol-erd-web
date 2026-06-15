@@ -43,14 +43,16 @@ if (window.opener && new URLSearchParams(window.location.search).has("code")) {
   }
 
   async function buildViewerHtml(graph) {
-    const [tpl, lib] = await Promise.all([
+    const [tpl, lib, insights] = await Promise.all([
       fetch("assets/template.html").then(r => r.text()),
       fetch("assets/vis-network.min.js").then(r => r.text()),
+      fetch("assets/insights.js").then(r => r.text()),
     ]);
     const graphJson = JSON.stringify(graph).replace(/<\//g, "<\\/");
-    // function replacements: the vis lib contains `$&`-style sequences that a
+    // function replacements: inlined JS may contain `$&`-style sequences that a
     // string replacement would corrupt.
     return tpl.replace("/*__VIS_NETWORK_JS__*/", () => lib)
+              .replace("/*__INSIGHTS_JS__*/", () => insights)
               .replace("/*__GRAPH_JSON__*/null", () => graphJson);
   }
 

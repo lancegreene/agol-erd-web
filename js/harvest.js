@@ -10,6 +10,7 @@ const Harvest = (() => {
   function classify(item) {
     const t = item.type;
     const keywords = (item.typeKeywords || []).join(" ");
+    const url = item.url || "";
     const mapping = {
       "Feature Service": "Feature Service",
       "Map Service": "Map Image Service",
@@ -22,7 +23,15 @@ const Harvest = (() => {
     };
     if (t in mapping) return mapping[t];
     if (t === "Web Mapping Application") {
-      return keywords.includes("instantApp") ? "Instant App" : "Web AppBuilder";
+      // WAB carries its own keyword; check it first so a WAB app is never
+      // mislabeled. Everything else under this type is the Instant Apps /
+      // configurable-app family — modern Instant Apps use the /apps/instant/
+      // URL and a `configurableApp` keyword, NOT the older `instantApp` one.
+      if (keywords.includes("Web AppBuilder")) return "Web AppBuilder";
+      if (url.includes("/apps/instant/") || keywords.includes("instantApp") || keywords.includes("configurableApp")) {
+        return "Instant App";
+      }
+      return "Web AppBuilder";
     }
     return "Other (" + t + ")";
   }

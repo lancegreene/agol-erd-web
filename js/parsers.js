@@ -82,7 +82,7 @@ const Parsers = (() => {
     return [refs, []];
   }
 
-  const ID_KEYS = new Set(["itemid", "webmap", "mapitemid", "mapid"]);
+  const ID_KEYS = new Set(["itemid", "webmap", "mapitemid", "mapid", "featureserviceitemid"]);
   const SERVICE_URL_RE = /\/(featureserver|mapserver|sceneserver)(\/|$)/i;
   const MAX_SCAN_DEPTH = 100;
 

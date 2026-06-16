@@ -1434,6 +1434,46 @@
   },
   {
    "in": {
+    "dataSources": [
+     {
+      "dataSourceId": "ds0",
+      "featureServiceItemId": "cccccccccccccccccccccccccccccccc",
+      "templateGroups": [],
+      "url": "https://services.arcgis.com/abc/arcgis/rest/services/Sample_Reports/FeatureServer/0"
+     }
+    ],
+    "name": "Sample Field Project",
+    "templateGroups": [
+     {
+      "name": "Group 1",
+      "templates": [
+       {
+        "name": "Report a problem"
+       }
+      ]
+     }
+    ]
+   },
+   "out": {
+    "refs": [
+     {
+      "item_id": "cccccccccccccccccccccccccccccccc",
+      "kind": "app-uses-item",
+      "layer_index": null,
+      "url": null
+     },
+     {
+      "item_id": null,
+      "kind": "app-uses-item",
+      "layer_index": 0,
+      "url": "https://services.arcgis.com/abc/arcgis/rest/services/Sample_Reports/FeatureServer/0"
+     }
+    ],
+    "warnings": []
+   }
+  },
+  {
+   "in": {
     "logo": {
      "url": "https://example.com/logo.png"
     },

@@ -146,11 +146,24 @@ const Harvest = (() => {
     if (nodeType === "Experience Builder") {
       return Parsers.parseExbWithFallback(await retry(() => fetchItemData(session, dataUrl)));
     }
-    if (["Dashboard", "Web AppBuilder", "Instant App", "StoryMap", "QuickCapture"].includes(nodeType)) {
-      // QuickCapture stores its backing feature-service references in the
-      // project JSON (no reliable item-relationship endpoint), so the same
-      // deep-scan used for app configs finds its service URLs.
+    if (["Dashboard", "Web AppBuilder", "Instant App", "StoryMap"].includes(nodeType)) {
       return Parsers.parseGenericApp(await retry(() => fetchItemData(session, dataUrl)));
+    }
+    if (nodeType === "QuickCapture") {
+      // QuickCapture stores its project definition (with backing feature-service
+      // references) as an item RESOURCE, not in /data. Scan every JSON resource
+      // and deep-scan it for service references.
+      const base = restRoot + "/content/items/" + item.id;
+      const listing = await retry(() => rest(session, base + "/resources", {num: 1000}));
+      const names = (listing.resources || []).map(r => r.resource || "")
+        .filter(n => n.toLowerCase().endsWith(".json"));
+      if (!names.length) return [[], ["no JSON project resource found"]];
+      const refs = [];
+      for (const name of names) {
+        const data = await retry(() => fetchItemData(session, base + "/resources/" + name));
+        refs.push(...Parsers.parseGenericApp(data)[0]);
+      }
+      return [refs, []];
     }
     if (nodeType === "Survey123 Form" ||
         (SERVICE_TYPES.includes(nodeType) && (item.typeKeywords || []).includes("View Service"))) {

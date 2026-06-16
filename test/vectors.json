@@ -1386,6 +1386,54 @@
   },
   {
    "in": {
+    "folderId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "values": {
+     "mapItemCollection": [
+      {
+       "id": "cccccccccccccccccccccccccccccccc",
+       "title": "Sample App",
+       "type": "Web Map",
+       "url": "https://example.maps.arcgis.com/sharing/rest/content/items/cccccccccccccccccccccccccccccccc",
+       "visible": true
+      }
+     ],
+     "mapItemFilterConfig": [
+      {
+       "layerExpressions": [],
+       "mapId": "cccccccccccccccccccccccccccccccc"
+      }
+     ],
+     "mapItemLayerSelector": [
+      {
+       "layers": [
+        {
+         "fields": [
+          "status"
+         ],
+         "id": "186a-layer-6"
+        }
+       ],
+       "mapId": "cccccccccccccccccccccccccccccccc"
+      }
+     ],
+     "title": "Sample App"
+    }
+   },
+   "out": {
+    "refs": [
+     {
+      "item_id": "cccccccccccccccccccccccccccccccc",
+      "kind": "app-uses-item",
+      "layer_index": null,
+      "url": null
+     }
+    ],
+    "warnings": []
+   }
+  },
+  {
+   "in": {
     "logo": {
      "url": "https://example.com/logo.png"
     },

@@ -70,6 +70,23 @@ const Harvest = (() => {
     return resp;
   }
 
+  // The /data endpoint returns an item's raw data document, which is an EMPTY
+  // body for items that have none. arcgisRest's JSON parse throws "Unexpected
+  // end of JSON input" on that. Read it raw and tolerate empty / non-JSON,
+  // returning null to mirror Python's item.get_data() — the parsers then
+  // report it gracefully instead of the harvest aborting the item.
+  async function fetchItemData(session, dataUrl) {
+    const resp = await arcgisRest.request(dataUrl, {
+      authentication: session,
+      httpMethod: "GET",
+      rawResponse: true,
+    });
+    const text = await resp.text();
+    if (!text || !text.trim()) return null;
+    try { return JSON.parse(text); }
+    catch (e) { return null; }
+  }
+
   async function recordCount(session, serviceBase, layerId) {
     try {
       const r = await retry(() => rest(session, serviceBase + "/" + layerId + "/query",
@@ -124,16 +141,16 @@ const Harvest = (() => {
   async function refsFor(session, restRoot, item, nodeType) {
     const dataUrl = restRoot + "/content/items/" + item.id + "/data";
     if (nodeType === "Web Map" || nodeType === "Web Scene") {
-      return Parsers.parseWebmap(await retry(() => rest(session, dataUrl)));
+      return Parsers.parseWebmap(await retry(() => fetchItemData(session, dataUrl)));
     }
     if (nodeType === "Experience Builder") {
-      return Parsers.parseExbWithFallback(await retry(() => rest(session, dataUrl)));
+      return Parsers.parseExbWithFallback(await retry(() => fetchItemData(session, dataUrl)));
     }
     if (["Dashboard", "Web AppBuilder", "Instant App", "StoryMap", "QuickCapture"].includes(nodeType)) {
       // QuickCapture stores its backing feature-service references in the
       // project JSON (no reliable item-relationship endpoint), so the same
       // deep-scan used for app configs finds its service URLs.
-      return Parsers.parseGenericApp(await retry(() => rest(session, dataUrl)));
+      return Parsers.parseGenericApp(await retry(() => fetchItemData(session, dataUrl)));
     }
     if (nodeType === "Survey123 Form" ||
         (SERVICE_TYPES.includes(nodeType) && (item.typeKeywords || []).includes("View Service"))) {

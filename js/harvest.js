@@ -20,6 +20,7 @@ const Harvest = (() => {
       "Dashboard": "Dashboard",
       "StoryMap": "StoryMap",
       "Form": "Survey123 Form",
+      "QuickCapture Project": "QuickCapture",
     };
     if (t in mapping) return mapping[t];
     if (t === "Web Mapping Application") {
@@ -128,7 +129,10 @@ const Harvest = (() => {
     if (nodeType === "Experience Builder") {
       return Parsers.parseExbWithFallback(await retry(() => rest(session, dataUrl)));
     }
-    if (["Dashboard", "Web AppBuilder", "Instant App", "StoryMap"].includes(nodeType)) {
+    if (["Dashboard", "Web AppBuilder", "Instant App", "StoryMap", "QuickCapture"].includes(nodeType)) {
+      // QuickCapture stores its backing feature-service references in the
+      // project JSON (no reliable item-relationship endpoint), so the same
+      // deep-scan used for app configs finds its service URLs.
       return Parsers.parseGenericApp(await retry(() => rest(session, dataUrl)));
     }
     if (nodeType === "Survey123 Form" ||

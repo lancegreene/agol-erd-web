@@ -4,7 +4,7 @@
 "use strict";
 
 const Report = (() => {
-  const APP_TYPES = ["Experience Builder", "Dashboard", "Web AppBuilder", "Instant App", "StoryMap"];
+  const APP_TYPES = ["Experience Builder", "Dashboard", "Web AppBuilder", "Instant App", "StoryMap", "QuickCapture"];
   const MAP_TYPES = ["Web Map", "Web Scene"];
   const SERVICE_TYPES = ["Feature Service", "Map Image Service"];
   const FORM_TYPE = "Survey123 Form";
